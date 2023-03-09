@@ -125,7 +125,7 @@ A multi-threaded experiment from command line written in Python is provided.
 import datetime
 import os
 import threading
- 
+
 def execCmd(cmd):
     try:
         print("command " + cmd + " starts at " + str(datetime.datetime.now()))
@@ -133,14 +133,14 @@ def execCmd(cmd):
         print("command " + cmd + " is finished at " + str(datetime.datetime.now()))
     except:
         print("command " + cmd + " meets errors")
- 
+
 if __name__ == '__main__':
 
 #define 2 different commands
     cmds = ['onnx-mlir -O3 mnist.onnx -o mnist03','onnx-mlir -O1 mnist.onnx -o mnist01']
 
     threads = []
-    
+
     print("program starts at " + str(datetime.datetime.now()))
 
 #run the commands
@@ -195,10 +195,20 @@ int main() {
   // The first input is of tensor<1x1x28x28xf32>.
   int64_t rank = 4;
   int64_t shape[] = {1, 1, 28, 28};
-  OMTensor *tensor = omTensorCreate(img_data, shape, rank, ONNX_TYPE_FLOAT);
-  // Create a tensor list.
+
+  // Create a tensor using omTensorCreateWithOwnership (returns a pointer to OMTensor).
+  // When the parameter, owning is set to "true", the OMTensor will free the data
+  // pointer (img_data) upon destruction. If owning is set to false, the data pointer will not be
+  // freed upon destruction. 
+  OMTensor *tensor = omTensorCreateWithOwnership(img_data, shape, rank, ONNX_TYPE_FLOAT, /*owning=*/true);
+
+  // Create a tensor list using omTensorListCreateWithOwnership (returns a pointer to the OMTensorList).
+  // When the parameter, owning is set to "true", the OMTensorList will free the tensor array
+  // upon destruction. If owning is set to false, the tensor array will not be
+  // freed upon destruction. It it important to note, that no matter the value of the 
+  // ownership flag, every tensor will be destroyed.
   inputTensors[0] = tensor;
-  OMTensorList *tensorListIn = omTensorListCreate(inputTensors, inputNum);
+  OMTensorList *tensorListIn = omTensorListCreateWithOwnership(inputTensors, inputNum, /*owning=*/true);
 
   // Compute outputs.
   OMTensorList *tensorListOut = run_main_graph(tensorListIn);
@@ -254,15 +264,15 @@ First, we include the necessary Python runtime library. The library path can be 
 
 ``` Python
 import numpy as np
-from PyRuntime import ExecutionSession
+from PyRuntime import OMExecutionSession
 ```
 
-The runtime use an `ExecutionSession` object to hold a specific model and entry point. On this object, we can perform in inference using the `run(input)` call where `input` is a list of numpy arrays. The signature of the input and output model can be extracted using, respectively, the `input_signature()` and `output_signature()` formatted as JSON strings. The code is shown below.
+The runtime use an `OMExecutionSession` object to hold a specific model and entry point. On this object, we can perform in inference using the `run(input)` call where `input` is a list of numpy arrays. The signature of the input and output model can be extracted using, respectively, the `input_signature()` and `output_signature()` formatted as JSON strings. The code is shown below.
 
 ``` Python
 #Load the model mnist.so compiled with onnx-mlir.
 model = 'mnist.so'
-session = ExecutionSession(model)
+session = OMExecutionSession(model)
 #Print the models input / output signature, for display.
 #If there are problems with the signature functions,                           \
     they can be simply commented out.

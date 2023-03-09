@@ -357,14 +357,14 @@ Krnl erf scalar operation.
 
 Retrieve an index into a perfect hash table described by G and V.
 
-This operation can be used to generate a call to a runtime function which, 
+This operation can be used to generate a call to a runtime function which,
 given two arrays of int32_t values (G and V), which are used to represent a perfect
 hash table for a dictionary, returns the index corresponding to the input value.
 The index returned is valid only if 'input' is in the dictionary described by G and V.
 
-Traits: MemRefsNormalizable
+Traits: AlwaysSpeculatableImplTrait, MemRefsNormalizable
 
-Interfaces: NoSideEffect (MemoryEffectOpInterface)
+Interfaces: ConditionallySpeculatable, NoMemoryEffect (MemoryEffectOpInterface)
 
 Effects: MemoryEffects::Effect{}
 
@@ -450,9 +450,9 @@ Operation for holding global data values. A global constant can have a
 meaningful name recorded as its `name` attribute. Its content is stored
 in the `value` dense/opaque element attribute.
 
-Traits: MemRefsNormalizable
+Traits: AlwaysSpeculatableImplTrait, MemRefsNormalizable
 
-Interfaces: NoSideEffect (MemoryEffectOpInterface)
+Interfaces: ConditionallySpeculatable, NoMemoryEffect (MemoryEffectOpInterface)
 
 Effects: MemoryEffects::Effect{}
 
@@ -484,9 +484,26 @@ May be used for gdb.
 | Attribute | MLIR Type | Description |
 | :-------: | :-------: | ----------- |
 | `opName` | ::mlir::StringAttr | string attribute
-| `opID` | ::mlir::IntegerAttr | 64-bit signless integer attribute
 | `tag` | ::mlir::IntegerAttr | 64-bit signless integer attribute
 | `nodeName` | ::mlir::StringAttr | string attribute
+
+### `krnl.isinf` (::mlir::KrnlIsInfOp)
+
+Krnl isinf scalar operation
+
+Krnl isinf scalar operation.
+
+#### Operands:
+
+| Operand | Description |
+| :-----: | ----------- |
+| `in` | floating-point
+
+#### Results:
+
+| Result | Description |
+| :----: | ----------- |
+| `out` | 1-bit signless integer
 
 ### `krnl.isnan` (::mlir::KrnlIsNaNOp)
 
@@ -793,8 +810,12 @@ Interfaces: SpecializedKernelOpInterface
 
 Krnl memcpy operation
 
-In the KRNL dialect the reshape op
-doesn't generate a new memory entry and treats a reshape like a cast.
+Copy `num_elems` elements from `src` to `dest` MemRef.
+
+Starting positions for `src` and `dest` are defined by `src_offset` and
+`dest_offset`, respectively.
+
+It is the users' responsibility to make sure there is no out-of-bound read/write.
 
 Traits: MemRefsNormalizable
 
@@ -804,7 +825,9 @@ Traits: MemRefsNormalizable
 | :-----: | ----------- |
 | `dest` | memref of any type values
 | `src` | memref of any type values
-| `size` | integer
+| `num_elems` | 64-bit signless integer
+| `dest_offset` | index
+| `src_offset` | index
 
 ### `krnl.memset` (::mlir::KrnlMemsetOp)
 
@@ -821,7 +844,7 @@ Krnl operation that sets a buffer to a given value.
 In case that the buffer is a MemRef with affine_map, `delayed` indicates
 whether we set values along original or extended iteration space.
 
-For example, given 
+For example, given
 - an affine_map `#tile = affine_map < (i)->(i floordiv 4, i mod 4) >`, and
 - a buffer of type `memref<5xf32, #tile>`
 
@@ -957,8 +980,8 @@ affine.for %arg0 = 0 to 1024 step 4 {
 
 Print a value.
 
-This operation can be used to print the input value. The user needs to provide a 
-format string (à la printf) to specify how to print the input value. 
+This operation can be used to print the input value. The user needs to provide a
+format string (à la printf) to specify how to print the input value.
 If the input value is not specified the operator will print the format string.
 
 Traits: MemRefsNormalizable
@@ -1025,7 +1048,7 @@ Traits: MemRefsNormalizable
 
 Affine boundary for krnl loops
 
-This Op has a region with AffineScope trait and is used to limit the 
+This Op has a region with AffineScope trait and is used to limit the
 scope of `affine.for`. The loop inside `krnl.region` can be affined if
 its boundary is defined at the level of `krnl.region`. The `krnl.region` does
 not guarantee or require the loops inside it to be affine.
@@ -1034,7 +1057,7 @@ is not defined inside a enclosing region without AffineScope trait.
 In MLIR, FuncOp has the AffineScope trait.
 The `krnl.region` will be removed after affine.for is lowered.
 ToFix: current `krnl.region` does not have input and output. You cannot
-create a new memref inside the region and use it outside of the region. 
+create a new memref inside the region and use it outside of the region.
 
 Traits: AffineScope, NoTerminator, SingleBlock
 
@@ -1044,7 +1067,7 @@ Krnl create a sequence
 
 This op allocates a memref for a new sequence according to the input Type and length.
 The output is tagged with Allocate side effect, and a deallocation is defined for
-sequence. This deallocation will free all the elements in the sequence as well as 
+sequence. This deallocation will free all the elements in the sequence as well as
 the sequence itself.
 
 Traits: MemRefsNormalizable
@@ -1087,13 +1110,13 @@ The loaded element is copied and then return.
 The position value is guaranteed to be positive. Negative position allowed
 by ONNX Op definition should be handled before lowered to KrnlSeqExtract.
 
-Attribute 'copy' provides an optimization for copying. 
-When the attribute 'copy' is 1 (default value): the extracted element is copied and then return. 
+Attribute 'copy' provides an optimization for copying.
+When the attribute 'copy' is 1 (default value): the extracted element is copied and then return.
 When the attribute 'copy' is 0: the extracted element is directly returned
 without copy.
 
 The returned element is marked as allocated by this Op with the bufferation
-interface so that deallocation can be generated correctly through the 
+interface so that deallocation can be generated correctly through the
 Bufferization::Deallocation pass.
 
 Traits: MemRefsNormalizable
@@ -1124,7 +1147,7 @@ Interfaces: AllocationOpInterface, MemoryEffectOpInterface
 Krnl store into a seq
 
 This op is similar to KrnSeqInsertOp but assumes that the input seq has
-the space for the new element and 
+the space for the new element and
 only need to copy the element and store it into the sequence.
 There is no return of a new seq, different from KrnlSeqInsertOp.
 This Op is introduced to accumulate a dynamic tensor in a LoopOp with
@@ -1217,7 +1240,9 @@ Compute the length of a string.
 
 Krnl operation that computes the length of a string.
 
-Interfaces: NoSideEffect (MemoryEffectOpInterface)
+Traits: AlwaysSpeculatableImplTrait
+
+Interfaces: ConditionallySpeculatable, NoMemoryEffect (MemoryEffectOpInterface)
 
 Effects: MemoryEffects::Effect{}
 
@@ -1239,7 +1264,9 @@ Perform string comparison up to N bytes.
 
 Krnl operation that performs a string comparison up to N bytes.
 
-Interfaces: NoSideEffect (MemoryEffectOpInterface)
+Traits: AlwaysSpeculatableImplTrait
+
+Interfaces: ConditionallySpeculatable, NoMemoryEffect (MemoryEffectOpInterface)
 
 Effects: MemoryEffects::Effect{}
 
@@ -1333,9 +1360,9 @@ corresponding dimension for target memref type.
 %AV = vector_type_cast %A : memref<?x?xf32> to memref<?x?xvector<8xf32>>
 ```
 
-Traits: MemRefsNormalizable
+Traits: AlwaysSpeculatableImplTrait, MemRefsNormalizable
 
-Interfaces: CastOpInterface, NoSideEffect (MemoryEffectOpInterface), ViewLikeOpInterface
+Interfaces: CastOpInterface, ConditionallySpeculatable, NoMemoryEffect (MemoryEffectOpInterface), ViewLikeOpInterface
 
 Effects: MemoryEffects::Effect{}
 
